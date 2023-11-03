@@ -1,6 +1,6 @@
 # MicroPython EInk displays drivers
 #
-# Driver for Good Display GDEY075T7 ePaper
+# Driver WaveShare 3-color display
 #
 # MIT License
 # Copyright (c) 2023 Ondrej Sienczak
@@ -24,13 +24,34 @@
 # SOFTWARE.
 from __future__ import annotations
 
-from .core.base import IEpd
+from .logging import logger
+
+from struct import pack
+from time import sleep
 
 
-@IEpd.parameters(width=800, height=480, colors={"white": 15, "gray": 12, "black": 0})
-@IEpd.driver_despi_c02
-class Epd(IEpd):
-    ...
+class DrvWaveShare3Color:
+    def _init(self) -> None:
+        logger.info("\tInit ...")
+
+        with self._rst:
+            sleep(0.2)
+        sleep(0.2)
+
+        self._cmd(0x06, b"\x17\x17\x17")
+        self._cmd(0x00, b"\x0F")
+        self._cmd(0x61, pack(">HH", self._w, self._h))
+        self._cmd(0x50, b"\xF7")
+        self._cmd(0x04)
+        self._wait4ready(False)
+
+    def _flush(self) -> None:
+        logger.info("\tPower on screen screen ...")
+        self._cmd(0x12)
+        self._wait4ready(False, 30)
+
+        logger.info("\tPower off screen screen ...")
+        self._cmd(0x10, b"\x01")
 
 
-__all__ = ("Epd",)
+__all__ = ("DrvWaveShare3Color",)

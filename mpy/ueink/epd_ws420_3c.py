@@ -1,6 +1,6 @@
 # MicroPython EInk displays drivers
 #
-# Driver for Good Display GDEY075T7 ePaper
+# Driver for WaveShare 1.54inch e-Paper V2
 #
 # MIT License
 # Copyright (c) 2023 Ondrej Sienczak
@@ -27,8 +27,10 @@ from __future__ import annotations
 from .core.base import IEpd
 
 
-@IEpd.parameters(width=800, height=480, colors={"white": 15, "gray": 12, "black": 0})
-@IEpd.driver_despi_c02
+@IEpd.parameters(
+    width=400, height=300, colors={"black": 0, "white": 1, "yellow": 2, "red": 2}
+)
+@IEpd.driver_waveshare_3color
 class Epd(IEpd):
     ...
 

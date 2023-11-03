@@ -199,7 +199,7 @@ class FrameBuffer:
                     yy = y
                     while vline_data:
                         if vline_data & 1 and 0 <= y and y < self.height:
-                            self._setpixel(self, self, x, yy, col)
+                            self._setpixel(self, x, yy, col)
                         vline_data >>= 1
                         yy += 1
                 x += 1

@@ -22,8 +22,12 @@
 # SOFTWARE.
 from __future__ import annotations
 
+from .drv_despi_c02 import DrvDespiC02
+from .drv_ws_3c import DrvWaveShare3Color
+from .drv_ws_bw import DrvWaveShareBw
 from .gpio import NCSPin
 from .logging import logger
+from .transform import Transform1B, Transform2B
 
 from framebuf import FrameBuffer, GS4_HMSB, MONO_HLSB
 from gc import collect
@@ -106,17 +110,6 @@ class IEpd(ABC):
     @abstractmethod
     def _init(self) -> None:
         """Interface method which proceed complete initialization of EInk"""
-        ...
-
-    @abstractmethod
-    def _flush_raw(self, stream: "uio.FileIO" | "uio.BytesIO") -> None:
-        """Interface method for flushing RAW buffers to EInk display
-
-        This method reads RAW data to be displayed on EInk display directly
-        from stream. RAW data are specific for each type of EInk display.
-
-        :param stream:    Stream as source of RAW data.
-        """
         ...
 
     @abstractmethod
@@ -241,22 +234,32 @@ class IEpd(ABC):
         return decorator
 
     @staticmethod
-    def two_buffers_grayscale(cls: type) -> type:
-        """Decorator setting methods used to decode and write gray-scale data to double buffered system"""
-        cls._flush_raw_buffers = cls._2b_flush
-        cls._fb2raw = cls._2b_fb2raw_gs
+    def driver_waveshare_black_and_white(cls: type) -> type:
+        """Decorator setting methods used for accessing EInk through WaveShare Black & White driver"""
+        cls._init = DrvWaveShareBw._init
+        cls._flush = DrvWaveShareBw._flush
+        cls._flush_raw_buffers = Transform1B._flush_raw_buffers
+        cls._fb2raw = Transform1B._fb2raw
         return cls
 
     @staticmethod
-    def single_buffer_black_and_white(cls: type) -> type:
-        """Decorator setting methods used to decode and write black and white data to single buffered system"""
-        cls._flush_raw_buffers = cls._1b_flush
-        cls._fb2raw = cls._1b_fb2raw
+    def driver_waveshare_3color(cls: type) -> type:
+        """Decorator setting methods used for accessing EInk through WaveShare 3-colors driver"""
+        cls._init = DrvWaveShare3Color._init
+        cls._flush = DrvWaveShare3Color._flush
+        cls._flush_raw_buffers = Transform2B._flush_raw_buffers
+        cls._fb2raw_com = Transform2B._fb2raw_com
+        cls._fb2raw = Transform2B._fb2raw_3c
         return cls
 
     @staticmethod
     def driver_despi_c02(cls: type) -> type:
-        """Decorator setting methods used for decoding by DESPI-C02 driver"""
+        """Decorator setting methods used for accessing EInk through DESPI-C02 driver"""
+        cls._init = DrvDespiC02._init
+        cls._flush = DrvDespiC02._flush
+        cls._flush_raw_buffers = Transform2B._flush_raw_buffers
+        cls._fb2raw_com = Transform2B._fb2raw_com
+        cls._fb2raw = Transform2B._fb2raw_gs
         return cls
 
     # #################################
@@ -287,107 +290,20 @@ class IEpd(ABC):
         with self._cs:
             self._spi.write(data)
 
-    def _wait4ready(self, busy: bool) -> None:
+    def _wait4ready(self, busy: bool, timeout: int = 10) -> None:
         rdy = int(not busy)
-        for _ in range(2000):
+        for _ in range(timeout * 100):
             if rdy == self._busy.value():
                 return
             sleep(0.01)
 
         raise RuntimeError("EPD Timeout")
 
-    def _1b_fb2raw(self) -> bytearray:
-        raw_buf = bytearray(self._fb_len // 4)
-
-        if self._tran:
-            # Transposing display orientation. Pixel by pixel - slow method
-            px_i = self._fb.pixel
-            px_o = FrameBuffer(raw_buf, self.height, self.width, MONO_HLSB).pixel
-            r = self.height - 1
-
-            for y in range(self.width):
-                for x in range(self.height):
-                    px_o(x, y, px_i(y, r - x) >> 3)
-        else:
-            # Use of built-in blit conversion (native display orientation)
-            fb = FrameBuffer(raw_buf, self.width, self.height, MONO_HLSB)
-            pal = FrameBuffer(bytearray(b"\x00\xFF"), 16, 1, MONO_HLSB)
-            fb.blit(self._fb, 0, 0, -1, pal)
-
-        return raw_buf
-
-    def _1b_flush(self, stream: "uio.FileIO" | "uio.BytesIO") -> None:
-        buf_len = self._fb_len // 4
-        logger.info(f"\tWrite RAW buffer ({buf_len} bytes) ...")
-        segm_len = min(buf_len, self._blk_size)
-        segm = memoryview(bytearray(segm_len))
-
-        self._cmd(0x24)
-        cnt = stream.readinto(segm)
-        while cnt:
-            self._data(segm[:cnt])
-            cnt = stream.readinto(segm)
-
-    def _2b_fb2raw_gs(self) -> bytearray:
-        raw_buf = memoryview(bytearray(self._fb_len // 2))
-        buf_len = self._fb_len // 4
-
-        if self._tran:
-            # Transposing display orientation. Pixel by pixel - slow method
-            px_i = self._fb.pixel
-            px_o1 = FrameBuffer(
-                raw_buf[:buf_len], self.height, self.width, MONO_HLSB
-            ).pixel
-            px_o2 = FrameBuffer(
-                raw_buf[buf_len:], self.height, self.width, MONO_HLSB
-            ).pixel
-            r = self.height - 1
-
-            for y in range(self.width):
-                for x in range(self.height):
-                    p = px_i(y, r - x) >> 2
-                    px_o1(x, y, p >> 1)
-                    px_o2(x, y, p & 1)
-        else:
-            # Direct frame buffer conversion (native display orientation)
-            self._2b_convert(
-                raw_buf[:buf_len],
-                b"\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x02\x02\x02\x02\x02\x02\x02\x02\x03\x03\x03\x03\x03\x03\x03\x03\x02\x02\x02\x02\x02\x02\x02\x02\x03\x03\x03\x03\x03\x03\x03\x03\x02\x02\x02\x02\x02\x02\x02\x02\x03\x03\x03\x03\x03\x03\x03\x03\x02\x02\x02\x02\x02\x02\x02\x02\x03\x03\x03\x03\x03\x03\x03\x03\x02\x02\x02\x02\x02\x02\x02\x02\x03\x03\x03\x03\x03\x03\x03\x03\x02\x02\x02\x02\x02\x02\x02\x02\x03\x03\x03\x03\x03\x03\x03\x03\x02\x02\x02\x02\x02\x02\x02\x02\x03\x03\x03\x03\x03\x03\x03\x03\x02\x02\x02\x02\x02\x02\x02\x02\x03\x03\x03\x03\x03\x03\x03\x03",
-            )
-
-            self._2b_convert(
-                raw_buf[buf_len:],
-                b"\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x01\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03\x02\x02\x02\x02\x03\x03\x03\x03",
-            )
-
-        return raw_buf
-
-    def _2b_flush(self, stream: "uio.FileIO" | "uio.BytesIO") -> None:
-        logger.info("\tWrite RAW buffer 1 ...")
-        buf_len = self._fb_len // 4
-        segm_len = min(buf_len, self._blk_size)
-        segm = memoryview(bytearray(segm_len))
-
-        self._cmd(0x10)
-        for i in range(0, buf_len, segm_len):
-            cnt = stream.readinto(segm[: min(segm_len, buf_len - i)])
-            self._data(segm[:cnt])
-
-        logger.info("\tWrite RAW buffer 2 ...")
-        self._cmd(0x13)
-        for i in range(0, buf_len, segm_len):
-            cnt = stream.readinto(segm[: min(segm_len, buf_len - i)])
-            self._data(segm[:cnt])
-
-    def _2b_convert(self, raw_buf: memoryview, lut: dict) -> None:
-        s = 0
-        for d in range(len(raw_buf)):
-            b = 0
-            for _ in range(4):
-                b <<= 2
-                b |= lut[self._buf[s]]
-                s += 1
-            raw_buf[d] = b
+    def _flush_raw(self, stream: "uio.FileIO" | "uio.BytesIO") -> None:
+        logger.info("Display frame:")
+        self._init()
+        self._flush_raw_buffers(stream)
+        self._flush()
 
 
 __all__ = ("IEpd",)

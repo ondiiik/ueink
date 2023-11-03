@@ -66,7 +66,7 @@ def _fill_rect(fb: "FrameBuffer", x: int, y: int, w: int, h: int, col: int) -> N
             ww += 1
 
         # memset(pixel_pair, col_pixel_pair, ww >> 1)
-        fb.buf[o : o + col_pixel_pair] = [ww >> 1] * col_pixel_pair
+        fb.buf[o : o + col_pixel_pair] = [(ww >> 1) & 255] * col_pixel_pair
         o += ww >> 1
 
         if ww % 2:

@@ -1,6 +1,6 @@
 # MicroPython EInk displays drivers
 #
-# Driver for Good Display GDEY075T7 ePaper
+# Driver for WaveShare 1.54inch e-Paper V2
 #
 # MIT License
 # Copyright (c) 2023 Ondrej Sienczak
@@ -26,13 +26,7 @@ from __future__ import annotations
 
 from .core.base import IEpd
 from .core.logging import logger
-from .core.resources import (
-    EPD_GS4_LUT_K2K,
-    EPD_GS4_LUT_K2W,
-    EPD_GS4_LUT_VCOM,
-    EPD_GS4_LUT_W2K,
-    EPD_GS4_LUT_W2W,
-)
+from .core.resources import EPD_WS_BW
 
 from io import BytesIO
 from struct import pack
@@ -40,8 +34,8 @@ from time import sleep
 from upycompat.typing_extensions import override
 
 
-@IEpd.parameters(width=800, height=480, colors={"white": 15, "gray": 12, "black": 0})
-@IEpd.two_buffers_grayscale
+@IEpd.parameters(width=200, height=200, colors={"white": 15, "black": 0})
+@IEpd.single_buffer_black_and_white
 class Epd(IEpd):
     def _init(self) -> None:
         logger.info("\tInit ...")
@@ -53,53 +47,57 @@ class Epd(IEpd):
     def _flush_raw(self, stream: "uio.FileIO" | BytesIO) -> None:
         logger.info("Display frame:")
         self._init()
-        self._on()
         self._flush_raw_buffers(stream)
-        self._flush()
+        self._on()
         self._off()
 
     def _reset(self) -> None:
+        sleep(0.02)
         with self._rst:
-            sleep(0.01)
-        sleep(0.01)
+            sleep(0.005)
+        sleep(0.021)
+        self._wait4ready(True)
 
     def _setup(self) -> None:
         self._initialized = True
-        self._cmd(0x01, b"\x07\x07\x3F\x3F\x00")
-        self._cmd(0x06, b"\x17\x17\x28\x17")
-        self._cmd(0x00, b"\x3F")
-        self._cmd(0x61, pack(">HH", self._w, self._h))
-        self._cmd(0x15, b"\x00")
-        self._cmd(0x82, b"\x30")
-        self._cmd(0x50, b"\x29\x07")
-        self._cmd(0x60, b"\x22")
-        self._cmd(0x92)
+
+        self._cmd(0x12)
+        self._wait4ready(True)
+
+        self._cmd(0x01, b"\xC7\x00\x01")
+        self._cmd(0x11, b"\x01")
+        self._cmd(0x44, pack("<bb", 0, (self._w - 1) >> 3))
+        self._cmd(0x45, pack("<HH", (self._h - 1), 0))
+        self._cmd(0x3C, b"\x01")
+        self._cmd(0x18, b"\x80")
+        self._cmd(0x22, b"\xB1")
+        self._cmd(0x20)
+        self._cmd(0x4E, b"\x00")
+        self._cmd(0x4F, pack("<H", (self._h - 1)))
+        self._wait4ready(True)
+
+        self._set_lut()
 
     def _set_lut(self) -> None:
-        self._cmd(0x20, EPD_GS4_LUT_VCOM)
-        self._cmd(0x21, EPD_GS4_LUT_W2W)
-        self._cmd(0x22, EPD_GS4_LUT_K2W)
-        self._cmd(0x23, EPD_GS4_LUT_W2K)
-        self._cmd(0x24, EPD_GS4_LUT_K2K)
+        lut = memoryview(EPD_WS_BW)
 
-    def _flush(self) -> None:
-        logger.info("\tFlush screen ...")
-        self._cmd(0x12)
-        sleep(0.002)
-        self._wait4ready(False)
+        self._cmd(0x32, lut)
+        self._wait4ready(True)
+
+        self._cmd(0x3F, lut[153:154])
+        self._cmd(0x03, lut[154:155])
+        self._cmd(0x04, lut[155:158])
+        self._cmd(0x2C, lut[158:159])
 
     def _off(self) -> None:
         logger.info("\tPower off screen screen ...")
-        self._cmd(0x50, b"0xF7")
-        self._cmd(0x02)
-        self._wait4ready(False)
-        sleep(0.1)
-        self._cmd(0x07, b"0xA5")
+        self._cmd(0x10, b"\x01")
 
     def _on(self) -> None:
         logger.info("\tPower on screen screen ...")
-        self._cmd(0x04)
-        self._wait4ready(False)
+        self._cmd(0x22, b"\xC7")
+        self._cmd(0x20)
+        self._wait4ready(True)
 
 
 __all__ = ("Epd",)

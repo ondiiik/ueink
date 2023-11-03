@@ -28,6 +28,7 @@ from .logging import logger
 from framebuf import FrameBuffer, GS4_HMSB, MONO_HLSB
 from gc import collect
 from io import BytesIO
+from time import sleep
 from upycompat.abc import (
     ABC,
     abstractmethod,
@@ -246,6 +247,18 @@ class IEpd(ABC):
         cls._fb2raw = cls._2b_fb2raw_gs
         return cls
 
+    @staticmethod
+    def single_buffer_black_and_white(cls: type) -> type:
+        """Decorator setting methods used to decode and write black and white data to single buffered system"""
+        cls._flush_raw_buffers = cls._1b_flush
+        cls._fb2raw = cls._1b_fb2raw
+        return cls
+
+    @staticmethod
+    def driver_despi_c02(cls: type) -> type:
+        """Decorator setting methods used for decoding by DESPI-C02 driver"""
+        return cls
+
     # #################################
     # ###  Internal helpers methods ###
     # #################################
@@ -254,8 +267,11 @@ class IEpd(ABC):
             self._renewfb()
 
     def _renewfb(self) -> None:
+        l = (self.width * self.height + 1) // 2
+        logger.info(f"New frame buffer: {self.width} x {self.height} ({l} bytes)")
+
         if self._buf is None:
-            self._buf = bytearray((self.width * self.height + 1) // 2)
+            self._buf = bytearray(l)
         self._fb = FrameBuffer(self._buf, self.width, self.height, GS4_HMSB)
         self._fb.fill(self.color["white"])
 
@@ -271,14 +287,54 @@ class IEpd(ABC):
         with self._cs:
             self._spi.write(data)
 
+    def _wait4ready(self, busy: bool) -> None:
+        rdy = int(not busy)
+        for _ in range(2000):
+            if rdy == self._busy.value():
+                return
+            sleep(0.01)
+
+        raise RuntimeError("EPD Timeout")
+
+    def _1b_fb2raw(self) -> bytearray:
+        raw_buf = bytearray(self._fb_len // 4)
+
+        if self._tran:
+            # Transposing display orientation. Pixel by pixel - slow method
+            px_i = self._fb.pixel
+            px_o = FrameBuffer(raw_buf, self.height, self.width, MONO_HLSB).pixel
+            r = self.height - 1
+
+            for y in range(self.width):
+                for x in range(self.height):
+                    px_o(x, y, px_i(y, r - x) >> 3)
+        else:
+            # Use of built-in blit conversion (native display orientation)
+            fb = FrameBuffer(raw_buf, self.width, self.height, MONO_HLSB)
+            pal = FrameBuffer(bytearray(b"\x00\xFF"), 16, 1, MONO_HLSB)
+            fb.blit(self._fb, 0, 0, -1, pal)
+
+        return raw_buf
+
+    def _1b_flush(self, stream: "uio.FileIO" | "uio.BytesIO") -> None:
+        buf_len = self._fb_len // 4
+        logger.info(f"\tWrite RAW buffer ({buf_len} bytes) ...")
+        segm_len = min(buf_len, self._blk_size)
+        segm = memoryview(bytearray(segm_len))
+
+        self._cmd(0x24)
+        cnt = stream.readinto(segm)
+        while cnt:
+            self._data(segm[:cnt])
+            cnt = stream.readinto(segm)
+
     def _2b_fb2raw_gs(self) -> bytearray:
         raw_buf = memoryview(bytearray(self._fb_len // 2))
         buf_len = self._fb_len // 4
 
         if self._tran:
             # Transposing display orientation. Pixel by pixel - slow method
-            fb = self._fb
-            px_in = fb.pixel
+            px_i = self._fb.pixel
             px_o1 = FrameBuffer(
                 raw_buf[:buf_len], self.height, self.width, MONO_HLSB
             ).pixel
@@ -289,7 +345,7 @@ class IEpd(ABC):
 
             for y in range(self.width):
                 for x in range(self.height):
-                    p = px_in(y, r - x) >> 2
+                    p = px_i(y, r - x) >> 2
                     px_o1(x, y, p >> 1)
                     px_o2(x, y, p & 1)
         else:
@@ -305,16 +361,6 @@ class IEpd(ABC):
             )
 
         return raw_buf
-
-    def _2b_convert(self, raw_buf: memoryview, lut: dict) -> None:
-        s = 0
-        for d in range(len(raw_buf)):
-            b = 0
-            for _ in range(4):
-                b <<= 2
-                b |= lut[self._buf[s]]
-                s += 1
-            raw_buf[d] = b
 
     def _2b_flush(self, stream: "uio.FileIO" | "uio.BytesIO") -> None:
         logger.info("\tWrite RAW buffer 1 ...")
@@ -332,6 +378,16 @@ class IEpd(ABC):
         for i in range(0, buf_len, segm_len):
             cnt = stream.readinto(segm[: min(segm_len, buf_len - i)])
             self._data(segm[:cnt])
+
+    def _2b_convert(self, raw_buf: memoryview, lut: dict) -> None:
+        s = 0
+        for d in range(len(raw_buf)):
+            b = 0
+            for _ in range(4):
+                b <<= 2
+                b |= lut[self._buf[s]]
+                s += 1
+            raw_buf[d] = b
 
 
 __all__ = ("IEpd",)

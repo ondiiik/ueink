@@ -58,6 +58,6 @@ epd.flush()
 Installation of drivers to your Micropython device is fairly simple. You just need to copy following files/folders
 into root of your device file system.
 
-- Folder [mpy/ueink](https://github.com/ondiiik/ueink/tree/main/mpy/ueink) as `ueink`
-- Folder [mpy/upycompat](https://github.com/ondiiik/ueink/tree/main/mpy/upycompat) as `upycompat`
-- File [mpy_root/\_\_future\_\_.py](https://github.com/ondiiik/ueink/blob/main/mpy_root/__future__.py) as `__future__.py`
+- Folder [ueink](https://github.com/ondiiik/ueink/tree/main/mpy/ueink) as `ueink`
+- Folder [upycompat](https://github.com/ondiiik/ueink/tree/main/mpy/upycompat) as `upycompat`
+- File [mpy\_root/\_\_future\_\_.py](https://github.com/ondiiik/ueink/blob/main/mpy_root/__future__.py) as `__future__.py`

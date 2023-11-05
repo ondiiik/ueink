@@ -29,7 +29,7 @@ from .gpio import NCSPin
 from .logging import logger
 from .transform import Transform1B, Transform2B
 
-from framebuf import FrameBuffer, GS4_HMSB, MONO_HLSB
+from framebuf import FrameBuffer, GS4_HMSB
 from gc import collect
 from io import BytesIO
 from time import sleep

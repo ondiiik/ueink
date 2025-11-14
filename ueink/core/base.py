@@ -37,6 +37,7 @@ from upycompat.abc import (
     ABC,
     abstractmethod,
 )
+from asyncio import sleep as asleep
 
 
 class IEpd(ABC):
@@ -100,6 +101,8 @@ class IEpd(ABC):
         self._tran = False
 
         self._blk_size = 1024
+
+        self._flushing = False
 
         self.width = self._w
         self.height = self._h
@@ -196,17 +199,26 @@ class IEpd(ABC):
 
         :param stream:    Stream as source of RAW data.
         """
-        if self._spi is None:
-            raise RuntimeError("Flush is not supported when no SPI bus selected")
+        self._flush_raw(self._preflush(stream))
 
-        if stream is None:
-            if self._fb is None:
-                raise RuntimeError(
-                    "Frame buffer was not created (property Eink.fb was not read)"
-                )
-            stream = BytesIO(self._fb2raw())
+    async def flush_async(self, stream: "uio.FileIO" | "uio.BytesIO" | None = None) -> None:
+        """Async variant of flush RAW buffers to EInk display
 
-        self._flush_raw(stream)
+        This method reads RAW data to be displayed on EInk display directly
+        from stream. This is fastest and lowest RAM consumption way how to
+        write data to eink, where image can be uploaded e.g. directly
+        from SD Card (even from zlib compressed form through
+        `deflate.DeflateIO`).
+
+        When stream argument is omitted (or is set to `None`), then internal frame
+        buffer is used.
+
+        This method is needed as flush procedure usually takes some time when we
+        don't want to block other `asyncio` tasks.
+
+        :param stream:    Stream as source of RAW data.
+        """
+        await self._flush_raw_async(self._preflush(stream))
 
     # ###################
     # ###  Decorators ###
@@ -226,6 +238,7 @@ class IEpd(ABC):
 
         def decorator(cls: type) -> type:
             cls.color = colors
+            cls.dim = width, height
             cls._w = width
             cls._h = height
             cls._fb_len = (width * height + 1) // 2
@@ -238,6 +251,7 @@ class IEpd(ABC):
         """Decorator setting methods used for accessing EInk through WaveShare Black & White driver"""
         cls._init = DrvWaveShareBw._init
         cls._flush = DrvWaveShareBw._flush
+        cls._flush_async = DrvWaveShareBw._flush_async
         cls._flush_raw_buffers = Transform1B._flush_raw_buffers
         cls._fb2raw = Transform1B._fb2raw
         return cls
@@ -247,6 +261,7 @@ class IEpd(ABC):
         """Decorator setting methods used for accessing EInk through WaveShare 3-colors driver"""
         cls._init = DrvWaveShare3Color._init
         cls._flush = DrvWaveShare3Color._flush
+        cls._flush_async = DrvWaveShare3Color._flush_async
         cls._flush_raw_buffers = Transform2B._flush_raw_buffers
         cls._fb2raw_com = Transform2B._fb2raw_com
         cls._fb2raw = Transform2B._fb2raw_3c
@@ -257,6 +272,7 @@ class IEpd(ABC):
         """Decorator setting methods used for accessing EInk through DESPI-C02 driver"""
         cls._init = DrvDespiC02._init
         cls._flush = DrvDespiC02._flush
+        cls._flush_async = DrvDespiC02._flush_async
         cls._flush_raw_buffers = Transform2B._flush_raw_buffers
         cls._fb2raw_com = Transform2B._fb2raw_com
         cls._fb2raw = Transform2B._fb2raw_gs
@@ -299,11 +315,49 @@ class IEpd(ABC):
 
         raise RuntimeError("EPD Timeout")
 
+    async def _wait4ready_async(self, busy: bool, timeout: int = 10) -> None:
+        rdy = int(not busy)
+        for _ in range(timeout * 100):
+            if rdy == self._busy.value():
+                return
+            await asleep(0.01)
+
+        raise RuntimeError("EPD Timeout")
+
+    def _preflush(self, stream: "uio.FileIO" | "uio.BytesIO" | None = None) -> None:
+        if self._spi is None:
+            raise RuntimeError("Flush is not supported when no SPI bus selected")
+
+        if stream is None:
+            if self._fb is None:
+                raise RuntimeError(
+                    "Frame buffer was not created (property Eink.fb was not read)"
+                )
+            stream = BytesIO(self._fb2raw())
+
+        return stream
+
     def _flush_raw(self, stream: "uio.FileIO" | "uio.BytesIO") -> None:
+        if self._flushing:
+            raise RuntimeError("EInk is already flushing by someone else")
+
         logger.info("Display frame:")
         self._init()
         self._flush_raw_buffers(stream)
         self._flush()
+
+    async def _flush_raw_async(self, stream: "uio.FileIO" | "uio.BytesIO") -> None:
+        if self._flushing:
+            raise RuntimeError("EInk is already flushing by someone else")
+
+        self._flushing = True
+        try:
+            logger.info("Display frame:")
+            self._init()
+            self._flush_raw_buffers(stream)
+            await self._flush_async()
+        finally:
+            self._flushing = False
 
 
 __all__ = ("IEpd",)

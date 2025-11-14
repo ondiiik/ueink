@@ -20,11 +20,9 @@
 # SOFTWARE.
 from __future__ import annotations
 
-from machine import Pin
-
 
 class NCSPin:
-    def __init__(self, pin: Pin) -> None:
+    def __init__(self, pin: "Pin") -> None:
         pin.init(pin.OUT, value=True)
         self._pin = pin
 
@@ -37,7 +35,7 @@ class NCSPin:
 
 
 class CSPin:
-    def __init__(self, pin: Pin) -> None:
+    def __init__(self, pin: "Pin") -> None:
         pin.init(pin.OUT, value=False)
         self._pin = pin
 

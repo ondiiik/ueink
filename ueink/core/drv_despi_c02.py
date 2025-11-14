@@ -35,6 +35,7 @@ from .resources import (
 
 from struct import pack
 from time import sleep
+from asyncio import sleep as asleep
 
 
 class DrvDespiC02:
@@ -75,6 +76,19 @@ class DrvDespiC02:
         self._cmd(0x02)
         self._wait4ready(False)
         sleep(0.1)
+        self._cmd(0x07, b"0xA5")
+
+    async def _flush_async(self) -> None:
+        logger.info("\tFlush screen ...")
+        self._cmd(0x12)
+        await asleep(0.002)
+        await self._wait4ready_async(False)
+
+        logger.info("\tPower off screen screen ...")
+        self._cmd(0x50, b"0xF7")
+        self._cmd(0x02)
+        await self._wait4ready_async(False)
+        await asleep(0.1)
         self._cmd(0x07, b"0xA5")
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ueink.epd_gdey075t7 import Epd  # Choose your display (GDEY075T7 in this case)
 
+from deflate import DeflateIO, ZLIB
 from machine import Pin, SPI
 
 

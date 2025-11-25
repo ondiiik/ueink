@@ -99,7 +99,7 @@ class IEpd(ABC):
 
         self._fb = None
         self._buf = None
-        self._tran = False
+        self._rotate = 0
 
         self._blk_size = 1024
 
@@ -163,18 +163,47 @@ class IEpd(ABC):
         self._blk_size = value
 
     @property
+    def rotate(self) -> int:
+        """Gets/sets display rotation
+
+        Display can be rotated by 0, 90, 180 or 270 degrees. When display is rotated
+        to different angle then 0 the display flushing is slower as image needs to
+        be transformed pixel by pixel before it is flushed.
+
+        When new rotation angle is set, then frame buffer is renew and all already
+        written graphics are lost. Any value different from 0, 90, 180, 270 is
+        rounded to the nearest valid angle.
+        """
+        return self._rotate
+
+    @rotate.setter
+    def rotate(self, value: int) -> None:
+        self._rotate = (((value + 45) // 90) * 90) % 360
+        self.width = self._h if self.transposed else self._w
+        self.height = self._w if self.transposed else self._h
+
+        if self._fb is not None:
+            self._renewfb()
+
+        collect()
+
+    @property
     def transposed(self) -> bool:
         """Gets/sets display transposed state
 
-        When display is transposed, then display frame buffer is rotated 90 degrees.
-        in this mode the display flushing is slower as image needs to be transposed
-        before it is flushed.
+        When display is transposed, then display frame buffer is rotated either by 90 or
+        270 degrees. In this mode the display flushing is slower as the image needs
+        to be transformed pixel by pixel before it is flushed.
+
+        When `transposed` is set to `True`, then display angle is set on 90 degrees,
+        otherwise to 0 degrees. New transpose value also renew frame buffer, so all
+        already written graphics are lost.
         """
-        return self._tran
+        return self._rotate in (90, 270)
 
     @transposed.setter
     def transposed(self, value: bool) -> None:
-        self._tran = value
+        self._rotate = 90 if value else 0
         self.width = self._h if value else self._w
         self.height = self._w if value else self._h
 

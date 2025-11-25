@@ -31,8 +31,12 @@ class Transform1B:
     def _fb2raw(self) -> bytearray:
         raw_buf = bytearray(self._fb_len // 4)
 
-        if self._tran:
-            # Transposing display orientation. Pixel by pixel - slow method
+        if self._rotate == 0:
+            # Use of fast built-in blit conversion (native display orientation)
+            fb = FrameBuffer(raw_buf, self.width, self.height, MONO_HLSB)
+            pal = FrameBuffer(bytearray(b"\x00\xFF"), 16, 1, MONO_HLSB)
+            fb.blit(self._fb, 0, 0, -1, pal)
+        elif self._rotate == 90:
             px_i = self._fb.pixel
             px_o = FrameBuffer(raw_buf, self.height, self.width, MONO_HLSB).pixel
             r = self.height - 1
@@ -40,11 +44,23 @@ class Transform1B:
             for y in range(self.width):
                 for x in range(self.height):
                     px_o(x, y, px_i(y, r - x) >> 3)
+        elif self._rotate == 180:
+            px_i = self._fb.pixel
+            px_o = FrameBuffer(raw_buf, self.height, self.width, MONO_HLSB).pixel
+            rx = self.width - 1
+            ry = self.height - 1
+
+            for y in range(self.width):
+                for x in range(self.height):
+                    px_o(x, y, px_i(rx - x, ry - y) >> 3)
         else:
-            # Use of built-in blit conversion (native display orientation)
-            fb = FrameBuffer(raw_buf, self.width, self.height, MONO_HLSB)
-            pal = FrameBuffer(bytearray(b"\x00\xFF"), 16, 1, MONO_HLSB)
-            fb.blit(self._fb, 0, 0, -1, pal)
+            px_i = self._fb.pixel
+            px_o = FrameBuffer(raw_buf, self.height, self.width, MONO_HLSB).pixel
+            r = self.width - 1
+
+            for y in range(self.width):
+                for x in range(self.height):
+                    px_o(x, y, px_i(r - y, x) >> 3)
 
         return raw_buf
 
@@ -74,8 +90,13 @@ class Transform2B:
         pal1 = FrameBuffer(bytearray(pal1), 16, 1, MONO_HLSB)
         pal2 = FrameBuffer(bytearray(pal2), 16, 1, MONO_HLSB)
 
-        if self._tran:
-            # Transposing display orientation. Pixel by pixel - slow method
+        if self._rotate == 0:
+            # Use of fast built-in blit conversion (native display orientation)
+            fb = FrameBuffer(raw_buf[:buf_len], self.width, self.height, MONO_HLSB)
+            fb.blit(self._fb, 0, 0, -1, pal1)
+            fb = FrameBuffer(raw_buf[buf_len:], self.width, self.height, MONO_HLSB)
+            fb.blit(self._fb, 0, 0, -1, pal2)
+        elif self._rotate == 90:
             px_i = self._fb.pixel
             px_o1 = FrameBuffer(raw_buf[:buf_len], self._w, self._h, MONO_HLSB).pixel
             px_o2 = FrameBuffer(raw_buf[buf_len:], self._w, self._h, MONO_HLSB).pixel
@@ -88,13 +109,33 @@ class Transform2B:
                     p = px_i(r - y, x)
                     px_o1(x, y, pal1(p, 0))
                     px_o2(x, y, pal2(p, 0))
-        else:
-            # Direct frame buffer conversion (native display orientation)
-            fb = FrameBuffer(raw_buf[:buf_len], self.width, self.height, MONO_HLSB)
-            fb.blit(self._fb, 0, 0, -1, pal1)
+        elif self._rotate == 180:
+            px_i = self._fb.pixel
+            px_o1 = FrameBuffer(raw_buf[:buf_len], self._w, self._h, MONO_HLSB).pixel
+            px_o2 = FrameBuffer(raw_buf[buf_len:], self._w, self._h, MONO_HLSB).pixel
+            rx = self._w - 1
+            ry = self._h - 1
 
-            fb = FrameBuffer(raw_buf[buf_len:], self.width, self.height, MONO_HLSB)
-            fb.blit(self._fb, 0, 0, -1, pal2)
+            pal1 = pal1.pixel
+            pal2 = pal2.pixel
+            for y in range(self._h):
+                for x in range(self._w):
+                    p = px_i(rx - x, ry - y)
+                    px_o1(x, y, pal1(p, 0))
+                    px_o2(x, y, pal2(p, 0))
+        else:
+            px_i = self._fb.pixel
+            px_o1 = FrameBuffer(raw_buf[:buf_len], self._w, self._h, MONO_HLSB).pixel
+            px_o2 = FrameBuffer(raw_buf[buf_len:], self._w, self._h, MONO_HLSB).pixel
+            r = self._w - 1
+
+            pal1 = pal1.pixel
+            pal2 = pal2.pixel
+            for y in range(self._h):
+                for x in range(self._w):
+                    p = px_i(y, r - x)
+                    px_o1(x, y, pal1(p, 0))
+                    px_o2(x, y, pal2(p, 0))
 
         return raw_buf
 

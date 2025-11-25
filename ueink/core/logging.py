@@ -32,5 +32,10 @@ class logger:
         if not epd_global_params["silent"]:
             print("eink ::", *args)
 
+    @staticmethod
+    def warning(*args) -> None:
+        if not epd_global_params["silent"]:
+            print("eink !!", *args)
+
 
 __all__ = ("logger",)

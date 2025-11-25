@@ -24,6 +24,10 @@
 # SOFTWARE.
 from __future__ import annotations
 
+from ueink.core.logging import logger
+
+from itertools import repeat
+
 
 def decorate_gs4_hmsb(fb: "FrameBuffer") -> None:
     fb._getpixel = _getpixel
@@ -32,49 +36,52 @@ def decorate_gs4_hmsb(fb: "FrameBuffer") -> None:
 
 
 def _setpixel(fb: "FrameBuffer", x: int, y: int, col: int) -> None:
-    col &= 0x0F
-    o = (x + y * fb.stride) >> 1
-
+    color = col & 0x0F
+    offset = (x + y * fb.stride) // 2
     if x % 2:
-        fb.buf[o] = (col & 0x0F) | (fb.buf[o] & 0xF0)
+        fb.buf[offset] = (color & 0x0F) | (fb.buf[offset] & 0xF0)
     else:
-        fb.buf[o] = (col << 4) | (fb.buf[o] & 0x0F)
+        fb.buf[offset] = (color << 4) | (fb.buf[offset] & 0x0F)
 
 
 def _getpixel(fb: "FrameBuffer", x: int, y: int) -> int:
     if x % 2:
-        return fb.buf[(x + y * fb.stride) >> 1] & 0x0F
+        return fb.buf[(x + y * fb.stride) // 2] & 0x0F
     else:
-        return fb.buf[(x + y * fb.stride) >> 1] >> 4
+        return fb.buf[(x + y * fb.stride) // 2] >> 4
 
 
-def _fill_rect(fb: "FrameBuffer", x: int, y: int, w: int, h: int, col: int) -> None:
-    col &= 0x0F
-    # uint8_t *pixel_pair = &((uint8_t *)fb->buf)[(x + y * fb->stride) >> 1];
-    o = (x + y * fb.stride) >> 1
-    col_shifted_left = col << 4
-    col_pixel_pair = col_shifted_left | col
-    pixel_count_till_next_line = (fb.stride - w) >> 1
+def _fill_rect(fb: "FrameBuffer", x: int, y: int, w: int, h: int, c: int) -> None:
+    if w <= 0 or h <= 0:
+        return
+
+    color_right = c & 0x0F
+    offset = (x + y * fb.stride) // 2
+    color_left = color_right << 4
+    col_pixel_pair = color_left | color_right
+    bytes_till_next = (fb.stride - w) // 2
     odd_x = x % 2
+    pairs_line = memoryview(bytes(repeat(col_pixel_pair, (w >> 1) + 1)))
 
     for _ in range(h):
-        ww = w
+        width = w
 
-        if odd_x and ww > 0:
-            fb.buf[o] = (fb.buf[o] & 0xF0) | col
-            o += 1
-            ww += 1
+        if odd_x:
+            fb.buf[offset] = (fb.buf[offset] & 0xF0) | color_right
+            offset += 1
+            width -= 1
 
-        # memset(pixel_pair, col_pixel_pair, ww >> 1)
-        fb.buf[o : o + col_pixel_pair] = [(ww >> 1) & 255] * col_pixel_pair
-        o += ww >> 1
+        bytes_width = width // 2
+        fb.buf[offset : offset + bytes_width] = pairs_line[:bytes_width]
+        offset += bytes_width
 
-        if ww % 2:
-            fb.buf[o] = col_shifted_left | (fb.buf[o] & 0x0F)
+        if width % 2:
+            fb.buf[offset] = color_left | (fb.buf[offset] & 0x0F)
             if not odd_x:
-                o += 1
+                offset += 1
+                width += 1
 
-        o += pixel_count_till_next_line
+        offset += bytes_till_next
 
 
 __all__ = ("decorate_gs4_hmsb",)

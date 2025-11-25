@@ -18,4 +18,4 @@ with open("screen.raw", "rb") as f:
 print("That's it ;-)")
 
 
-__all__ = ("epd",) 
+__all__ = ("epd",)

@@ -33,9 +33,9 @@ from .resources import (
     EPD_GS4_LUT_W2W,
 )
 
+from asyncio import sleep as asleep
 from struct import pack
 from time import sleep
-from asyncio import sleep as asleep
 
 
 class DrvDespiC02:

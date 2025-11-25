@@ -10,7 +10,7 @@ for arg in sys.argv:
 
 setup(
     name="ueink",
-    version="0.0.1",
+    version="0.0.2",
     author="OSi",
     author_email="ondrej.sienczak@gmail.com",
     url="https://github.com/ondiiik/ueink",

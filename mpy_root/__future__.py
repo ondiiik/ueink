@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # Python adaptation
 #
 # MIT License

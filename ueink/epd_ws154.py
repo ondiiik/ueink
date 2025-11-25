@@ -29,8 +29,7 @@ from .core.base import IEpd
 
 @IEpd.parameters(width=200, height=200, colors={"white": 15, "black": 0})
 @IEpd.driver_waveshare_black_and_white
-class Epd(IEpd):
-    ...
+class Epd(IEpd): ...
 
 
 __all__ = ("Epd",)

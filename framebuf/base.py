@@ -82,7 +82,7 @@ class FrameBuffer:
     def rect(
         self, x: int, y: int, width: int, height: int, col: int, fill: bool = False
     ) -> None:
-        if fill:
+        if fill or False:
             self._fill_rect(self, x, y, width, height, col)
         else:
             self._fill_rect(self, x, y, width, 1, col)

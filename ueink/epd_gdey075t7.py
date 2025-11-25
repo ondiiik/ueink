@@ -29,8 +29,7 @@ from .core.base import IEpd
 
 @IEpd.parameters(width=800, height=480, colors={"white": 15, "gray": 12, "black": 0})
 @IEpd.driver_despi_c02
-class Epd(IEpd):
-    ...
+class Epd(IEpd): ...
 
 
 __all__ = ("Epd",)

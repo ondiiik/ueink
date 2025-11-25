@@ -31,8 +31,7 @@ from .core.base import IEpd
     width=400, height=300, colors={"black": 0, "white": 1, "yellow": 2, "red": 2}
 )
 @IEpd.driver_waveshare_3color
-class Epd(IEpd):
-    ...
+class Epd(IEpd): ...
 
 
 __all__ = ("Epd",)

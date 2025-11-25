@@ -23,8 +23,7 @@
 from __future__ import annotations
 
 
-class ABC:
-    ...
+class ABC: ...
 
 
 def abstractmethod(_: "function") -> "function":

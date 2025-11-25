@@ -29,6 +29,7 @@ from .gpio import NCSPin
 from .logging import logger
 from .transform import Transform1B, Transform2B
 
+from asyncio import sleep as asleep
 from framebuf import FrameBuffer, GS4_HMSB
 from gc import collect
 from io import BytesIO
@@ -37,7 +38,6 @@ from upycompat.abc import (
     ABC,
     abstractmethod,
 )
-from asyncio import sleep as asleep
 
 
 class IEpd(ABC):
@@ -58,8 +58,9 @@ class IEpd(ABC):
     def __init__(
         self,
         *,
-        spi: "machine.SPI"
-        | None = None,  # No SPI in the case that we use driver only as an RAW data generator
+        spi: (
+            "machine.SPI" | None
+        ) = None,  # No SPI in the case that we use driver only as an RAW data generator
         cs: "machine.Pin" | None = None,
         dc: "machine.Pin" | None = None,
         rst: "machine.Pin" | None = None,
@@ -201,7 +202,9 @@ class IEpd(ABC):
         """
         self._flush_raw(self._preflush(stream))
 
-    async def flush_async(self, stream: "uio.FileIO" | "uio.BytesIO" | None = None) -> None:
+    async def flush_async(
+        self, stream: "uio.FileIO" | "uio.BytesIO" | None = None
+    ) -> None:
         """Async variant of flush RAW buffers to EInk display
 
         This method reads RAW data to be displayed on EInk display directly

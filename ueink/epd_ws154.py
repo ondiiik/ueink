@@ -27,7 +27,12 @@ from __future__ import annotations
 from .core.base import IEpd
 
 
-@IEpd.parameters(width=200, height=200, colors={"white": 15, "black": 0})
+@IEpd.parameters(
+    width=200,
+    height=200,
+    colors={"white": 15, "black": 0},
+    palette=(b"\0\0\0", b"\xFF\xFF\xFF"),
+)
 @IEpd.driver_waveshare_black_and_white
 class Epd(IEpd): ...
 

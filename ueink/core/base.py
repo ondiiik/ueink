@@ -261,15 +261,20 @@ class IEpd(ABC):
         width: int,
         height: int,
         colors: dict,
+        palette: tuple,
     ) -> "function":
         """Decorator helping to preset specific type of EInk display
 
-        :param width:        Define display width
-        :param height:       Define display height
+        :param width:    Define display width.
+        :param height:   Define display height.
+        :param colors:   Define color mapping dictionary for colors
+                         supported by display (e.g. black, white, yellow, ...).
+        :param palette:  Define RGB palette matching to color indexes.
         """
 
         def decorator(cls: type) -> type:
             cls.color = colors
+            cls.palette = palette
             cls.dim = width, height
             cls._w = width
             cls._h = height

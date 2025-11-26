@@ -28,7 +28,10 @@ from .core.base import IEpd
 
 
 @IEpd.parameters(
-    width=400, height=300, colors={"black": 0, "white": 1, "yellow": 2, "red": 2}
+    width=400,
+    height=300,
+    colors={"black": 0, "white": 1, "yellow": 2},
+    palette=(b"\0\0\0", b"\xFF\xFF\xFF", b"\xE0\xB2\x04"),
 )
 @IEpd.driver_waveshare_3color
 class Epd(IEpd): ...
